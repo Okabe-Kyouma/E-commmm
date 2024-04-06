@@ -2,8 +2,10 @@ const express = require('express');
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
+const jwt = require('jsonwebtoken');
 const product = require('./Model/product');
 const user = require('./Model/user');
+const cookieParser = require('cookie-parser');
 var userId = "";
 
 
@@ -29,15 +31,19 @@ app.use(session({
     //  cookie: { secure: true }
 }))
 
+app.use(cookieParser());
+
 
 
 app.get('/signup',(req, res) => {
 
-    if (req.session.username) {
-        res.redirect('/');
-    } else {
-        res.render('signup');
-    }
+    res.render('signup');
+
+    // if (req.session.username) {
+    //     res.redirect('/');
+    // } else {
+    //     res.render('signup');
+    // }
 })
 
 app.post('/signup', async (req, res) => {
@@ -86,13 +92,21 @@ app.post('/login', async (req, res) => {
     if (ppl) {
 
 
-
         const flag = await bcrypt.compare(password, ppl.password);
 
         if (flag) {
-            req.session.username = username;
+            // req.session.username = username;
+
+        
            
             userId = ppl._id.toString();
+
+            const token = jwt.sign({ _id: userId },"hello",{ expiresIn : "1h" });
+
+            
+            // console.log(token);
+            
+            res.cookie('token', token, { httpOnly: true , expires : new Date(Date.now() + 3600000) });
 
             res.redirect('/');
         } else {
@@ -110,17 +124,45 @@ app.post('/login', async (req, res) => {
 
 var check = (req, res, next) => {
 
-    if (req.session.username) {
-        next();
-    } else {
-        res.redirect('/signup');
+
+    try{
+        const token = req.cookies.token;
+
+        // console.log(token);
+
+        if(!token){
+            res.redirect('/login');
+        }
+
+         jwt.verify(token,"hello",(err,decoded)=>{
+            if(err){
+                // res.redirect('/login');
+            }
+            else{
+                next();
+            }
+         })
+       
     }
+    catch (err){
+        console.log(err);
+        // res.clearCookie("token");
+    //    return res.redirect('signup');
+    }
+
+    // if (req.session.username) {
+    //     next();
+    // } else {
+    //     res.redirect('/signup');
+    // }
 
 }
 
 app.get('/logout',(req,res)=>{
 
-    req.session.username = null;
+    // req.session.username = null;
+
+    res.clearCookie('token');
 
     res.redirect('/');
 
@@ -136,6 +178,22 @@ app.get('/', check, async (req, res) => {
         products
     })
 });
+
+app.get('/delete/:_id', async (req,res)=>{
+
+    const{_id} = req.params;
+
+    console.log(_id);
+
+    const deletedItem = await product.findByIdAndDelete(_id);
+
+    res.redirect('/');
+
+
+    
+    
+
+})
 
 app.get('/add', (req, res) => {
     res.render('add');
